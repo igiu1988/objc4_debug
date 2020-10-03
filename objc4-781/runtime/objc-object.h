@@ -498,13 +498,18 @@ objc_object::rootRetain(bool tryRetain, bool handleOverflow)
 
     do {
         transcribeToSideTable = false;
+        // 加锁，用汇编指令ldxr来保证原子性
         oldisa = LoadExclusive(&isa.bits);
         newisa = oldisa;
+        // nonpointer为0时，表示isa就是纯地址值（对象指针），也就是未开启指针优化
+        // 使用sidetable进行存储引用计数
         if (slowpath(!newisa.nonpointer)) {
+            // 释放锁，使用汇编指令clrex
             ClearExclusive(&isa.bits);
             if (rawISA()->isMetaClass()) return (id)this;
             if (!tryRetain && sideTableLocked) sidetable_unlock();
             if (tryRetain) return sidetable_tryRetain() ? (id)this : nil;
+            // 由于所有位数都是地址值，直接使用SideTable来存储引用计数
             else return sidetable_retain();
         }
         // don't check newisa.fast_rr; we already called any RR overrides
@@ -513,15 +518,20 @@ objc_object::rootRetain(bool tryRetain, bool handleOverflow)
             if (!tryRetain && sideTableLocked) sidetable_unlock();
             return nil;
         }
+        // 存储extra_rc++后的结果
         uintptr_t carry;
         newisa.bits = addc(newisa.bits, RC_ONE, 0, &carry);  // extra_rc++
 
+        // 这个if处理extra_rc溢出的情况
         if (slowpath(carry)) {
+            // 可以不处理溢出（我还不了解这么设计的原因）
             // newisa.extra_rc++ overflowed
             if (!handleOverflow) {
                 ClearExclusive(&isa.bits);
                 return rootRetain_overflow(tryRetain);
             }
+            
+            // extra_rc++后溢出，进位到side table
             // Leave half of the retain counts inline and 
             // prepare to copy the other half to the side table.
             if (!tryRetain && !sideTableLocked) sidetable_lock();
@@ -530,6 +540,7 @@ objc_object::rootRetain(bool tryRetain, bool handleOverflow)
             newisa.extra_rc = RC_HALF;
             newisa.has_sidetable_rc = true;
         }
+        // 下面的while，将newisa写入isa
     } while (slowpath(!StoreExclusive(&isa.bits, oldisa.bits, newisa.bits)));
 
     if (slowpath(transcribeToSideTable)) {
