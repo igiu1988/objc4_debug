@@ -105,9 +105,9 @@ enum HaveOld { DontHaveOld = false, DoHaveOld = true };
 enum HaveNew { DontHaveNew = false, DoHaveNew = true };
 
 struct SideTable {
-    spinlock_t slock;
-    RefcountMap refcnts;
-    weak_table_t weak_table;
+    spinlock_t slock;   // 自旋锁。防止多线程访问SideTable冲突
+    RefcountMap refcnts;    // 用于存储对象引用计数的map
+    weak_table_t weak_table;    // 用于存储对象弱引用的map
 
     SideTable() {
         memset(&weak_table, 0, sizeof(weak_table));
@@ -172,8 +172,11 @@ void SideTable::unlockTwo<DontHaveOld, DoHaveNew>
     lock2->unlock();
 }
 
+// 声明了一个全局变量，所有的weak引用都在这个表里
+// SideTablesMap 的初始化在arr_init()，而arr_init则是在镜像加载的过程中
 static objc::ExplicitInit<StripedMap<SideTable>> SideTablesMap;
 
+// 全局方法，返回
 static StripedMap<SideTable>& SideTables() {
     return SideTablesMap.get();
 }

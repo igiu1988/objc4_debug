@@ -817,6 +817,7 @@ enum { CacheLineSize = 64 };
 // or as StripedMap<SomeStruct> where SomeStruct stores a spin lock.
 template<typename T>
 class StripedMap {
+    // 为什么要有这样一个数组？
 #if TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR
     enum { StripeCount = 8 };
 #else
@@ -827,8 +828,10 @@ class StripedMap {
         T value alignas(CacheLineSize);
     };
 
+    // 哈希桶
     PaddedT array[StripeCount];
-
+    
+    // 由对象的地址哈希出索引
     static unsigned int indexForPointer(const void *p) {
         uintptr_t addr = reinterpret_cast<uintptr_t>(p);
         return ((addr >> 4) ^ (addr >> 9)) % StripeCount;

@@ -524,9 +524,10 @@ objc_object::rootRetain(bool tryRetain, bool handleOverflow)
 
         // 这个if处理extra_rc溢出的情况
         if (slowpath(carry)) {
-            // 可以不处理溢出（我还不了解这么设计的原因）
             // newisa.extra_rc++ overflowed
             if (!handleOverflow) {
+                // 不处理溢出的分支调用rootRetain_overflow，还会再次retain。
+                // 奇怪的设计（我还不了解这么设计的原因）
                 ClearExclusive(&isa.bits);
                 return rootRetain_overflow(tryRetain);
             }
@@ -747,7 +748,9 @@ objc_object::rootRetainCount()
     if (isTaggedPointer()) return (uintptr_t)this;
 
     sidetable_lock();
+    //加锁，用汇编指令ldxr来保证原子性
     isa_t bits = LoadExclusive(&isa.bits);
+    //释放锁，使用汇编指令clrex
     ClearExclusive(&isa.bits);
     if (bits.nonpointer) {
         uintptr_t rc = 1 + bits.extra_rc;
@@ -916,7 +919,7 @@ inline id
 objc_object::retain()
 {
     ASSERT(!isTaggedPointer());
-
+    // hasCustomRR方法检查类（包括其父类）中是否含有默认的方法
     if (fastpath(!ISA()->hasCustomRR())) {
         return sidetable_retain();
     }

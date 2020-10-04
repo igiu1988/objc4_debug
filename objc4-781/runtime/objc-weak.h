@@ -78,16 +78,18 @@ typedef DisguisedPtr<objc_object *> weak_referrer_t;
 #define REFERRERS_OUT_OF_LINE 2
 
 struct weak_entry_t {
-    DisguisedPtr<objc_object> referent;
-    union {
+    DisguisedPtr<objc_object> referent; //对象地址
+    union { //这里又是一个联合体, 苹果设计的数据结构的确很棒
         struct {
-            weak_referrer_t *referrers;
-            uintptr_t        out_of_line_ness : 2;
-            uintptr_t        num_refs : PTR_MINUS_2;
-            uintptr_t        mask;
-            uintptr_t        max_hash_displacement;
+            // 因为这里要存储的又是一个 weak 指针数组, 所以苹果继续选择采用哈希算法
+            weak_referrer_t *referrers; //指向引用对象的 weak 指针数组
+            uintptr_t        out_of_line_ness : 2;  //这里标记是否超过内联边界
+            uintptr_t        num_refs : PTR_MINUS_2;    //数组中已占用的大小
+            uintptr_t        mask;  //数组下标最大值(数组大小 - 1)
+            uintptr_t        max_hash_displacement; //最大哈希偏移值
         };
         struct {
+            //这是一个取名叫内联引用的数组, 宏定义的值是 4
             // out_of_line_ness field is low bits of inline_referrers[1]
             weak_referrer_t  inline_referrers[WEAK_INLINE_COUNT];
         };
@@ -117,10 +119,10 @@ struct weak_entry_t {
  * and weak_entry_t structs as their values.
  */
 struct weak_table_t {
-    weak_entry_t *weak_entries;
-    size_t    num_entries;
-    uintptr_t mask;
-    uintptr_t max_hash_displacement;
+    weak_entry_t *weak_entries; //连续地址空间的头指针, 数组
+    size_t    num_entries;  //数组中已占用位置的个数
+    uintptr_t mask; //数组下标最大值(即数组大小 -1)
+    uintptr_t max_hash_displacement;    //最大哈希偏移值
 };
 
 /// Adds an (object, weak pointer) pair to the weak table.
