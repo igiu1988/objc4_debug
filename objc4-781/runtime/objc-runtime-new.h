@@ -1246,7 +1246,7 @@ struct objc_class : objc_object {
     Class superclass;
     cache_t cache;             // formerly cache pointer and vtable
     class_data_bits_t bits;    // class_rw_t * plus custom rr/alloc flags
-
+    // 这是一个方法，这个方法能看出来，上面的bits变量其实包含着 class_rw_t
     class_rw_t *data() const {
         return bits.data();
     }
