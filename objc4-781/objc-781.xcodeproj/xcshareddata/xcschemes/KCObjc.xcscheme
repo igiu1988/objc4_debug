@@ -17,7 +17,7 @@
                BlueprintIdentifier = "7A88075D24CACD200070C15B"
                BuildableName = "KCObjc"
                BlueprintName = "KCObjc"
-               ReferencedContainer = "container:objc.xcodeproj">
+               ReferencedContainer = "container:objc-781.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -47,7 +47,7 @@
             BlueprintIdentifier = "7A88075D24CACD200070C15B"
             BuildableName = "KCObjc"
             BlueprintName = "KCObjc"
-            ReferencedContainer = "container:objc.xcodeproj">
+            ReferencedContainer = "container:objc-781.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -64,7 +64,7 @@
             BlueprintIdentifier = "7A88075D24CACD200070C15B"
             BuildableName = "KCObjc"
             BlueprintName = "KCObjc"
-            ReferencedContainer = "container:objc.xcodeproj">
+            ReferencedContainer = "container:objc-781.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
