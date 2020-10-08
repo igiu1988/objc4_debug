@@ -1019,7 +1019,7 @@ struct class_rw_t {
 #if SUPPORT_INDEXED_ISA
     uint16_t index;
 #endif
-
+    // 这是一个指针，可能指向ro也可能是一个rw，与类的初始化流程有关系
     explicit_atomic<uintptr_t> ro_or_rw_ext;
 
     Class firstSubclass;
