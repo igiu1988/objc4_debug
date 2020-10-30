@@ -906,41 +906,58 @@ class StripedMap {
 // Note that weak_entry_t knows about this encoding.
 template <typename T>
 class DisguisedPtr {
+    // unsigned long 类型的 value 足够保存转化为整数的内存地址
     uintptr_t value;
 
     static uintptr_t disguise(T* ptr) {
+        // 把 T 的地址转化为 unsigned long 并取负值，为什么要取负值
         return -(uintptr_t)ptr;
     }
 
     static T* undisguise(uintptr_t val) {
+        // 把 unsigned long 类型的 val 转为指针，对应上面的 disguise 函数
         return (T*)-val;
     }
 
  public:
-    DisguisedPtr() { }
-    DisguisedPtr(T* ptr) 
-        : value(disguise(ptr)) { }
+    DisguisedPtr() { } // 构造函数
+    // 初始化列表 ptr 初始化 value 成员变量
+    DisguisedPtr(T* ptr) : value(disguise(ptr)) { }
+    // 复制构造函数
     DisguisedPtr(const DisguisedPtr<T>& ptr) 
         : value(ptr.value) { }
 
+    // 重载操作符：
+    // T* 赋值函数，把一个 T 指针赋值给 DisguisedPtr<T> 类型变量时，直接发生地址到整数的转化
     DisguisedPtr<T>& operator = (T* rhs) {
         value = disguise(rhs);
         return *this;
     }
+    // DisguisedPtr<T>& 引用赋值函数
     DisguisedPtr<T>& operator = (const DisguisedPtr<T>& rhs) {
         value = rhs.value;
         return *this;
     }
 
+
+    /**
+     重载*运算符，但是这个*多加了一个限定是 T 类型的
+     所以在代码 lhs == (objc_object *)rhs 中
+     objc_object * 对应 T*
+     */
     operator T* () const {
         return undisguise(value);
     }
-    T* operator -> () const { 
+
+    // -> 怎么用？
+    T* operator -> () const {
         return undisguise(value);
     }
-    T& operator * () const { 
+    // * 怎么用？
+    T& operator * () const {
         return *undisguise(value);
     }
+    // [] 怎么用？
     T& operator [] (size_t i) const {
         return undisguise(value)[i];
     }
