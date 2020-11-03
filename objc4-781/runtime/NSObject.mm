@@ -1089,6 +1089,7 @@ public:
             token = page->begin();
         } else {
             page = pageForPointer(token);
+            // 此时的token已经是指向 page->begin()
         }
 
         stop = (id *)token;

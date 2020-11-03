@@ -76,12 +76,15 @@ objc_object::isClass()
 inline Class 
 objc_object::getIsa() 
 {
+    // 如果不是tagged pointer，则返回ISA()
     if (fastpath(!isTaggedPointer())) return ISA();
 
     extern objc_class OBJC_CLASS_$___NSUnrecognizedTaggedPointer;
     uintptr_t slot, ptr = (uintptr_t)this;
     Class cls;
 
+    // 如果是tagged pointer，取出高4位的内容，查找对应的class
+    // _OBJC_TAG_SLOT_SHIFT = 60，一个指针8字节，也就是64位，所以 ptr 右移60位，即是高4位
     slot = (ptr >> _OBJC_TAG_SLOT_SHIFT) & _OBJC_TAG_SLOT_MASK;
     cls = objc_tag_classes[slot];
     if (slowpath(cls == (Class)&OBJC_CLASS_$___NSUnrecognizedTaggedPointer)) {
