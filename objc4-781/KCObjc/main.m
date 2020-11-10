@@ -20,13 +20,15 @@
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
         // insert code here...
-        
+        NSString *name = @"";
         Person *objc1 = [[Person alloc] init];
         NSString *pName = objc1.name;
         Person *father = objc1.father;
+        __weak Person *weakFater = objc1;
+        __weak NSString *weakName = name;
 //        LGPerson *objc2 = [[LGPerson alloc] init];
 
-//        NSLog(@"Hello, World! %@ - %@",objc1,objc2);
+        NSLog(@"Hello, World! %@ - %@",objc1, weakFater);
     }
     return 0;
 }

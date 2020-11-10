@@ -819,51 +819,75 @@ template<typename T>
 class StripedMap {
     // 为什么要有这样一个数组？
 #if TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR
-    enum { StripeCount = 8 };
+    enum { StripeCount = 8 };   // iPhone 只有 8 张 SideTable
 #else
-    enum { StripeCount = 64 };
+    enum { StripeCount = 64 }; // 其它设备有 64 张 SideTable
 #endif
 
+    // 桶。把一系统的PaddedT放到数值中，就
     struct PaddedT {
+        // alignas 字节对齐。 CacheLineSize 在前面有定义 = 64
+        // 字节对齐在这里的意义？？？
         T value alignas(CacheLineSize);
     };
 
-    // 哈希桶
+    // 哈希桶，每一个元素就是一个桶
     PaddedT array[StripeCount];
     
     // 由对象的地址哈希出索引
     static unsigned int indexForPointer(const void *p) {
+        // 把 p 指针强转为 unsigned long
+        // reinterpret_cast<new_type> (expression) C++ 里的强制类型转换符
         uintptr_t addr = reinterpret_cast<uintptr_t>(p);
+        // addr 右移 4 位的值与 addr 右移 9 位的值做异或操作，
+        // 然后对 StripeCount 取模，防止越界
         return ((addr >> 4) ^ (addr >> 9)) % StripeCount;
     }
 
  public:
-    T& operator[] (const void *p) { 
+    // StripedMap[obj] 返回引用
+    T& operator[] (const void *p) {
+        // 调用 indexForPointer 将 p 哈希，根据哈希值从array中取出对应的桶
         return array[indexForPointer(p)].value; 
     }
-    const T& operator[] (const void *p) const { 
+    
+    // 原型：const_cast<type_id> (expression)
+    // const_cast 该运算符用来修改类型的 const 或 volatile 属性。
+    // 除了 const 或 volatile 修饰之外，type_id 和 expression的类型是一样的。
+    // 即把一个不可变类型转化为可变类型（const int b => int b1）
+    // 1. 常量指针被转化成非常量的指针，并且仍然指向原来的对象；
+    // 2. 常量引用被转换成非常量的引用，并且仍然指向原来的对象；
+    // 3. const_cast一般用于修改底指针。如const char *p形式。
+    
+    // 把 this 转化为 StripedMap<T>，然后调用上面的 []，得到 T&
+    const T& operator[] (const void *p) const {
+        // 这里 const_cast<StripedMap<T>>(this) 有必要吗，本来就是读取值，并不会修改 StripedMap 的内容鸭
         return const_cast<StripedMap<T>>(this)[p]; 
     }
 
     // Shortcuts for StripedMaps of locks.
+    // 循环给 array 中的元素的 value 加锁
+    // 以 iPhone 下 SideTables 为例的话，循环对 8 张 SideTable 加锁，
+    // struct SideTable 成员变量: spinlock_t slock，lock 函数实现是： void lock() { slock.lock(); }
     void lockAll() {
         for (unsigned int i = 0; i < StripeCount; i++) {
             array[i].value.lock();
         }
     }
-
+    // 同上，解锁
     void unlockAll() {
         for (unsigned int i = 0; i < StripeCount; i++) {
             array[i].value.unlock();
         }
     }
-
+    // 同上，重置 Lock
     void forceResetAll() {
         for (unsigned int i = 0; i < StripeCount; i++) {
             array[i].value.forceReset();
         }
     }
-
+    
+    // 对 array 中元素的 value 的 lock 定义锁定顺序？
     void defineLockOrder() {
         for (unsigned int i = 1; i < StripeCount; i++) {
             lockdebug_lock_precedes_lock(&array[i-1].value, &array[i].value);
@@ -872,19 +896,24 @@ class StripedMap {
 
     void precedeLock(const void *newlock) {
         // assumes defineLockOrder is also called
+                // 假定 defineLockOrder 函数已经被调用过
+        // assumes defineLockOrder is also called
         lockdebug_lock_precedes_lock(&array[StripeCount-1].value, newlock);
     }
 
     void succeedLock(const void *oldlock) {
         // assumes defineLockOrder is also called
+        // 假定 defineLockOrder 函数已经被调用过
         lockdebug_lock_precedes_lock(oldlock, &array[0].value);
     }
-
+    
+    // T 是 spinlock_t 时，根据指定下标从 StripedMap<spinlock_t> -> array 中取得 spinlock_t
     const void *getLock(int i) {
         if (i < StripeCount) return &array[i].value;
         else return nil;
     }
     
+    // 构造函数，在 DEBUG 模式下会验证 T 是否是 64 内存对齐的
 #if DEBUG
     StripedMap() {
         // Verify alignment expectations.

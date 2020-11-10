@@ -36,15 +36,29 @@ namespace objc {
 // ExplicitInit / LazyInit wrap doing it the hard way.
 template <typename Type>
 class ExplicitInit {
+    /*
+     uint8_t: typedef unsigned char uint8_t。
+     alignas(Type): _storage 内存对齐同 Type。
+     
+     _storage 是长度为 sizeof(Type) 的 unsigned char 类型数组
+     对于SideTablesMap来说，ExplicitInit 内部 _storage 数组长度是: alignas(StripedMap<SideTable>) sizeof(StripedMap<SideTable>)
+     */
     alignas(Type) uint8_t _storage[sizeof(Type)];
 
 public:
+    // c++11 新增加了变长模板，Ts 是 T 的复数形式，
+    // 如果我们要避免这种转换呢？
+    // 我们需要一种方法能按照参数原来的类型转发到另一个函数中，这才完美，我们称之为完美转发。
+    // std::forward 就可以保存参数的左值或右值特性。
+
+    // 初始化
     template <typename... Ts>
     void init(Ts &&... Args) {
         new (_storage) Type(std::forward<Ts>(Args)...);
     }
 
     Type &get() {
+        // 把 _storage 数组起始地址强制转化为 Type *
         return *reinterpret_cast<Type *>(_storage);
     }
 };

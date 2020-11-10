@@ -30,8 +30,8 @@
 __BEGIN_DECLS
 
 /*
-The weak table is a hash table governed by a single spin lock.
-An allocated blob of memory, most often an object, but under GC any such 
+The weak table is a hash table governed控制 by a single spin lock.
+An allocated blob块 of memory, most often an object, but under GC any such
 allocation, may have its address stored in a __weak marked storage location 
 through use of compiler generated write-barriers or hand coded uses of the 
 register weak primitive. Associated with the registration can be a callback 
@@ -51,10 +51,13 @@ reclamation.
 */
 
 // The address of a __weak variable.
-// These pointers are stored disguised so memory analysis tools
-// don't see lots of interior pointers from the weak table into objects.
+// These pointers are stored disguised伪装的 so memory analysis tools
+// don't see lots of interior内部 pointers from the weak table into objects.
+// 使用DisguisedPtr对指针再包装了一次，即所谓的伪装的指针（DisguisedPtr)。
+// 这样，内存分析工具就不会从weak table看到很多内部指针
 typedef DisguisedPtr<objc_object *> weak_referrer_t;
 
+// weak引用表的哈希数组长度
 #if __LP64__
 #define PTR_MINUS_2 62
 #else
@@ -75,40 +78,69 @@ typedef DisguisedPtr<objc_object *> weak_referrer_t;
 // The low two bits of a pointer-aligned DisguisedPtr will always be 0b00
 // (disguised nil or 0x80..00) or 0b11 (any other address).
 // Therefore out_of_line_ness == 0b10 is used to mark the out-of-line state.
+// 这段注释的理解见笔记：weak_referrer_t 是存储在哪个数组中的
 #define REFERRERS_OUT_OF_LINE 2
 
 struct weak_entry_t {
-    DisguisedPtr<objc_object> referent; //对象地址
-    union { //这里又是一个联合体, 苹果设计的数据结构的确很棒
+    DisguisedPtr<objc_object> referent; // 对象地址，详见笔记 DisguisedPtr
+
+    /*
+     当指向 referent 的弱引用个数小于等于 4 时使用 inline_referrers 数组保存这些弱引用变量的地址，
+     大于 4 以后用 referrers 这个哈希数组保存。
+    
+     共用 32 个字节内存空间的联合体
+     */
+    union {
         struct {
-            // 因为这里要存储的又是一个 weak 指针数组, 所以苹果继续选择采用哈希算法
-            weak_referrer_t *referrers; //指向引用对象的 weak 指针数组
-            uintptr_t        out_of_line_ness : 2;  //这里标记是否超过内联边界
-            uintptr_t        num_refs : PTR_MINUS_2;    //数组中已占用的大小
-            uintptr_t        mask;  //数组下标最大值(数组大小 - 1)
-            uintptr_t        max_hash_displacement; //最大哈希偏移值
+            // 保存 weak_referrer_t 的哈希数组
+            weak_referrer_t *referrers;
+            
+            // out_of_line_ness 和 num_refs 构成位域存储，共占 64 位
+            uintptr_t        out_of_line_ness : 2;  // 标记使用哈希数组referrers 还是 inline_referrers
+            uintptr_t        num_refs : PTR_MINUS_2;    // referrers数组长度
+            uintptr_t        mask;  // 数组下标最大值(数组大小 - 1)，会参与哈希函数计算
+            
+            // 可能会发生 hash 冲突的最大次数，用于判断是否出现了逻辑错误，（hash 表中的冲突次数绝对不会超过该值）
+            // 该值在新建 weak_entry_t 和插入新的 weak_referrer_t 时会被更新，它一直记录的都是最大偏移值
+            uintptr_t        max_hash_displacement; // 最大哈希偏移值
         };
         struct {
-            //这是一个取名叫内联引用的数组, 宏定义的值是 4
+            // 这是一个取名叫内联引用的数组, 宏定义的值是 4
             // out_of_line_ness field is low bits of inline_referrers[1]
+            // out_of_line_ness 和 inline_referrers[1] 的低两位的内存空间重合。这个是如何做到的？？？
+            // 长度为 4 的 weak_referrer_t（Dsiguised<objc_object *>）数组
             weak_referrer_t  inline_referrers[WEAK_INLINE_COUNT];
         };
     };
 
+    // 返回 true 表示使用第一个结构体中的 referrers 哈希数组
+    // 返回 false 表示使用第二个结构体中的 inline_referrers 数组保存 weak_referrer_t
     bool out_of_line() {
         return (out_of_line_ness == REFERRERS_OUT_OF_LINE);
     }
 
+    // 重载操作符
+    // 赋值操作，直接使用 memcpy 函数拷贝 other 内存里面的内容到 this 中，
+    // 而不是用复制构造函数什么的形式实现，应该也是为了提高效率考虑的...
     weak_entry_t& operator=(const weak_entry_t& other) {
         memcpy(this, &other, sizeof(other));
         return *this;
     }
 
+    // weak_entry_t 的构造函数
+    
+    // newReferent 是原始对象的指针
+    // newReferrer 是指向 newReferent 的弱引用变量的地址
+    
+    // 初始化列表 referent(newReferent) 会调用: DisguisedPtr(T* ptr) : value(disguise(ptr)) { } 构造函数，
+
     weak_entry_t(objc_object *newReferent, objc_object **newReferrer)
         : referent(newReferent)
     {
+        // 把 newReferrer 放在数组 0 位，也会调用 DisguisedPtr 构造函数，把 newReferrer 转化为整数保存
         inline_referrers[0] = newReferrer;
         for (int i = 1; i < WEAK_INLINE_COUNT; i++) {
+            // 循环把 inline_referrers 数组的剩余 3 位都置为 nil
             inline_referrers[i] = nil;
         }
     }
@@ -119,9 +151,16 @@ struct weak_entry_t {
  * and weak_entry_t structs as their values.
  */
 struct weak_table_t {
-    weak_entry_t *weak_entries; //连续地址空间的头指针, 数组
-    size_t    num_entries;  //数组中已占用位置的个数
-    uintptr_t mask; //数组下标最大值(即数组大小 -1)
+    weak_entry_t *weak_entries; // 存储 weak_entry_t 的哈希数组
+    size_t    num_entries;  // 当前 weak_entries 内保存的 weak_entry_t 的数量，哈希数组内保存的元素个数
+    uintptr_t mask; // 数组下标最大值，即数组大小减1，会参与 hash 函数计算
+    
+    // 记录所有项的最大偏移量，即发生 hash 冲突的最大次数
+    // 用于判断是否出现了逻辑错误，hash 表中的冲突次数绝对不会超过这个值，
+    // 下面关于 weak_entry_t 的操作函数中会看到这个成员变量的使用，这里先对它有一些了解即可，
+    // 因为会有 hash 碰撞的情况，而 weak_table_t 采用了开放寻址法来解决，
+    // 所以某个 weak_entry_t 实际存储的位置并不一定是 hash 函数计算出来的位置
+
     uintptr_t max_hash_displacement;    //最大哈希偏移值
 };
 

@@ -101,28 +101,39 @@ struct RefcountMapValuePurgeable {
 typedef objc::DenseMap<DisguisedPtr<objc_object>,size_t,RefcountMapValuePurgeable> RefcountMap;
 
 // Template parameters.
-enum HaveOld { DontHaveOld = false, DoHaveOld = true };
-enum HaveNew { DontHaveNew = false, DoHaveNew = true };
+enum HaveOld { DontHaveOld = false, DoHaveOld = true }; // 是否有旧值
+enum HaveNew { DontHaveNew = false, DoHaveNew = true }; // 是否有新值
 
 struct SideTable {
     spinlock_t slock;   // 自旋锁。防止多线程访问SideTable冲突
     RefcountMap refcnts;    // 用于存储对象引用计数的map
     weak_table_t weak_table;    // 用于存储对象弱引用的map
 
+    // 构造函数，只做了一件事把 weak_table 的空间置为 0
     SideTable() {
+        // 把从 &weak_table 位置开始的长度为 sizeof(weak_table) 的内存空间置为 0
         memset(&weak_table, 0, sizeof(weak_table));
     }
 
     ~SideTable() {
+        // 看到 SidetTable 是不能析构的，如果进行析构则会直接终止运行
         _objc_fatal("Do not delete SideTable.");
     }
 
+    // 三个函数正对应了 StripedMap 中模版抽象类型 T 的接口要求，三个函数的内部都是直接调用 slock 的对应函数
     void lock() { slock.lock(); }
     void unlock() { slock.unlock(); }
     void forceReset() { slock.forceReset(); }
 
     // Address-ordered lock discipline for a pair of side tables.
-
+    // HaveOld 和 HaveNew 分别表示 lock1 和 lock2 是否存在，
+    // 表示 __weak 变量是否指向有旧值和目前要指向的新值。
+    
+    // lock1 代表旧值对象所处的 SideTable
+    // lock2 代表新值对象所处的 SideTable
+    
+    // lockTwo 是根据谁有值就调谁的锁，触发加锁 (C++ 方法重载)，
+    // 如果两个都有值，那么两个都加锁，并且根据谁低，先给谁加锁，然后另一个后加锁
     template<HaveOld, HaveNew>
     static void lockTwo(SideTable *lock1, SideTable *lock2);
     template<HaveOld, HaveNew>
@@ -176,7 +187,7 @@ void SideTable::unlockTwo<DontHaveOld, DoHaveNew>
 // SideTablesMap 的初始化在arr_init()，而arr_init则是在镜像加载的过程中
 static objc::ExplicitInit<StripedMap<SideTable>> SideTablesMap;
 
-// 全局方法，返回
+// 全局函数，返回
 static StripedMap<SideTable>& SideTables() {
     return SideTablesMap.get();
 }
@@ -185,6 +196,8 @@ static StripedMap<SideTable>& SideTables() {
 };
 
 void SideTableLockAll() {
+    // SideTables() 的返回类型是 StripedMap
+    // 从 StripedMap 中可知 lockAll() 又是调用其抽象类型 T 所支持的 lock() 函数
     SideTables().lockAll();
 }
 
