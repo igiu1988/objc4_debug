@@ -32,7 +32,7 @@ namespace objc {
 // We cannot use a C++ static initializer to initialize certain globals because
 // libc calls us before our C++ initializers run. We also don't want a global
 // pointer to some globals because of the extra indirection.
-//
+// 在objc.A.dylib还没有初始化时，libc就调用了我们这个库里的一些静态对象。在这种情况下，只好使用 ExplicitInit 来做转发（placement)
 // ExplicitInit / LazyInit wrap doing it the hard way.
 template <typename Type>
 class ExplicitInit {

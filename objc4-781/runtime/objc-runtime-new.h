@@ -1271,6 +1271,9 @@ struct objc_class : objc_object {
         data()->changeFlags(set, clear);
     }
 
+    /**
+     如果是继承自NSObject，都会有默认的RR，RR见宏“FAST_HAS_DEFAULT_RR”的定义
+     */
 #if FAST_HAS_DEFAULT_RR
     bool hasCustomRR() const {
         return !bits.getBit(FAST_HAS_DEFAULT_RR);

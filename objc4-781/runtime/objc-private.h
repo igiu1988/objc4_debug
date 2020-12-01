@@ -1108,9 +1108,9 @@ public:
 };
 
 // Pointer hash function.
-// This is not a terrific hash, but it is fast 
+// This is not a terrific(极其好的，非常好的) hash, but it is fast
 // and not outrageously flawed for our purposes.
-
+// 这不是一个最好的哈希，但是它足够快，足以达成我们的目的，并且没有明显的缺陷。
 // Based on principles from http://locklessinc.com/articles/fast_hash/
 // and evaluation ideas from http://floodyberry.com/noncryptohashzoo/
 #if __LP64__
@@ -1118,7 +1118,7 @@ static inline uint32_t ptr_hash(uint64_t key)
 {
     key ^= key >> 4;
     key *= 0x8a970be7488fda55;
-    key ^= __builtin_bswap64(key);
+    key ^= __builtin_bswap64(key);  // __builtin_bswap64 翻转64位数各字节然后再做一次异或。可参考gcc的__builtin_函数介绍
     return (uint32_t)key;
 }
 #else
